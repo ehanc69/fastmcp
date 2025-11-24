@@ -22,25 +22,24 @@ from mcp.types import (
     CancelTaskRequestParams,
     GetTaskPayloadRequest,
     GetTaskPayloadRequestParams,
+    GetTaskPayloadResult,
     GetTaskRequest,
     GetTaskRequestParams,
+    GetTaskResult,
     ListTasksRequest,
     PaginatedRequestParams,
+    TaskStatusNotification,
 )
 from pydantic import AnyUrl
 
 import fastmcp
-from fastmcp.client._temporary_sep_1686_shims import (
-    TaskNotificationHandler,
-    TasksResponse,
-)
 from fastmcp.client.elicitation import ElicitationHandler, create_elicitation_callback
 from fastmcp.client.logging import (
     LogHandler,
     create_log_callback,
     default_log_handler,
 )
-from fastmcp.client.messages import MessageHandler, MessageHandlerT
+from fastmcp.client.messages import Message, MessageHandler, MessageHandlerT
 from fastmcp.client.progress import ProgressHandler, default_progress_handler
 from fastmcp.client.roots import (
     RootsHandler,
@@ -55,7 +54,6 @@ from fastmcp.client.sampling import (
 from fastmcp.client.tasks import (
     PromptTask,
     ResourceTask,
-    TaskStatusResponse,
     ToolTask,
 )
 from fastmcp.exceptions import ToolError
@@ -97,6 +95,26 @@ __all__ = [
 logger = get_logger(__name__)
 
 T = TypeVar("T", bound="ClientTransport")
+
+
+class TaskNotificationHandler(MessageHandler):
+    """MessageHandler that routes task status notifications to Task objects."""
+
+    def __init__(self, client: Client):
+        super().__init__()
+        self._client_ref: weakref.ref[Client] = weakref.ref(client)
+
+    async def dispatch(self, message: Message) -> None:
+        """Dispatch messages, including task status notifications."""
+        # Handle task status notifications using SDK's TaskStatusNotification type
+        if isinstance(message, mcp.types.ServerNotification):
+            if isinstance(message.root, TaskStatusNotification):
+                client = self._client_ref()
+                if client:
+                    client._handle_task_status_notification(message.root)
+
+        # Call parent dispatch for all other messages
+        await super().dispatch(message)
 
 
 @dataclass
@@ -607,19 +625,16 @@ class Client(Generic[ClientTransportT]):
             # Ensure ready event is set even if context manager entry fails
             self._session_state.ready_event.set()
 
-    def _handle_task_status_notification(self, notification) -> None:
+    def _handle_task_status_notification(
+        self, notification: TaskStatusNotification
+    ) -> None:
         """Route task status notification to appropriate Task object.
 
         Called when notifications/tasks/status is received from server.
         Updates Task object's cache and triggers events/callbacks.
         """
-        # Convert params to dict (could be Pydantic model or dict)
-        if hasattr(notification.params, "model_dump"):
-            params = notification.params.model_dump()
-        else:
-            params = notification.params
-
-        task_id = params.get("taskId")
+        # Extract task ID from notification params
+        task_id = notification.params.taskId
         if not task_id:
             return
 
@@ -628,8 +643,8 @@ class Client(Generic[ClientTransportT]):
         if task_ref:
             task = task_ref()  # Dereference weakref
             if task:
-                # Create TaskStatusResponse from notification params and route to task
-                status = TaskStatusResponse(**params)
+                # Convert notification params to GetTaskResult (they share the same fields via Task)
+                status = GetTaskResult.model_validate(notification.params.model_dump())
                 task._handle_status_notification(status)
 
     async def close(self):
@@ -1442,7 +1457,7 @@ class Client(Generic[ClientTransportT]):
                 self, synthetic_task_id, tool_name=name, immediate_result=parsed_result
             )
 
-    async def get_task_status(self, task_id: str) -> TaskStatusResponse:
+    async def get_task_status(self, task_id: str) -> GetTaskResult:
         """Query the status of a background task.
 
         Sends a 'tasks/get' MCP protocol request over the existing transport.
@@ -1451,17 +1466,16 @@ class Client(Generic[ClientTransportT]):
             task_id: The task ID returned from call_tool_as_task
 
         Returns:
-            TaskStatusResponse: Status information including task_id, status, poll_interval, etc.
+            GetTaskResult: Status information including taskId, status, pollInterval, etc.
 
         Raises:
             RuntimeError: If client not connected
         """
         request = GetTaskRequest(params=GetTaskRequestParams(taskId=task_id))
-        result = await self.session.send_request(
+        return await self.session.send_request(
             request=request,  # type: ignore[arg-type]
-            result_type=TasksResponse,  # type: ignore[arg-type]
+            result_type=GetTaskResult,  # type: ignore[arg-type]
         )
-        return TaskStatusResponse.model_validate(result)
 
     async def get_task_result(self, task_id: str) -> Any:
         """Retrieve the raw result of a completed background task.
@@ -1481,10 +1495,13 @@ class Client(Generic[ClientTransportT]):
         request = GetTaskPayloadRequest(
             params=GetTaskPayloadRequestParams(taskId=task_id)
         )
-        return await self.session.send_request(
+        # Return raw result - Task classes handle type-specific parsing
+        result = await self.session.send_request(
             request=request,  # type: ignore[arg-type]
-            result_type=TasksResponse,  # type: ignore[arg-type]
+            result_type=GetTaskPayloadResult,  # type: ignore[arg-type]
         )
+        # Return as dict for compatibility with Task class parsing
+        return result.model_dump(exclude_none=True, by_alias=True)
 
     async def list_tasks(
         self,
@@ -1514,7 +1531,7 @@ class Client(Generic[ClientTransportT]):
         request = ListTasksRequest(params=params)
         server_response = await self.session.send_request(
             request=request,  # type: ignore[arg-type]
-            result_type=TasksResponse,  # type: ignore[arg-type]
+            result_type=dict,  # type: ignore[arg-type]
         )
 
         # If server returned tasks, use those
@@ -1533,7 +1550,7 @@ class Client(Generic[ClientTransportT]):
 
         return {"tasks": tasks, "nextCursor": None}
 
-    async def cancel_task(self, task_id: str) -> TaskStatusResponse:
+    async def cancel_task(self, task_id: str) -> GetTaskResult:
         """Cancel a task, transitioning it to cancelled state.
 
         Sends a 'tasks/cancel' MCP protocol request. Task will halt execution
@@ -1543,17 +1560,16 @@ class Client(Generic[ClientTransportT]):
             task_id: The task ID to cancel
 
         Returns:
-            TaskStatusResponse: The task status showing cancelled state
+            GetTaskResult: The task status showing cancelled state
 
         Raises:
             RuntimeError: If task doesn't exist
         """
         request = CancelTaskRequest(params=CancelTaskRequestParams(taskId=task_id))
-        result = await self.session.send_request(
+        return await self.session.send_request(
             request=request,  # type: ignore[arg-type]
-            result_type=TasksResponse,  # type: ignore[arg-type]
+            result_type=GetTaskResult,  # type: ignore[arg-type]
         )
-        return TaskStatusResponse.model_validate(result)
 
     @classmethod
     def generate_name(cls, name: str | None = None) -> str:

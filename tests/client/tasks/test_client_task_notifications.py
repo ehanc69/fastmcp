@@ -9,10 +9,10 @@ import asyncio
 import time
 
 import pytest
+from mcp.types import GetTaskResult
 
 from fastmcp import FastMCP
 from fastmcp.client import Client
-from fastmcp.client.tasks import TaskStatusResponse
 
 
 @pytest.fixture
@@ -74,7 +74,7 @@ async def test_callback_invoked_on_notification(task_notification_server):
     """User callback is invoked when notification arrives."""
     callback_invocations = []
 
-    def status_callback(status: TaskStatusResponse):
+    def status_callback(status: GetTaskResult):
         """Sync callback."""
         callback_invocations.append(status)
 
@@ -102,7 +102,7 @@ async def test_async_callback_invoked(task_notification_server):
     """Async callback is invoked when notification arrives."""
     callback_invocations = []
 
-    async def async_status_callback(status: TaskStatusResponse):
+    async def async_status_callback(status: GetTaskResult):
         """Async callback."""
         await asyncio.sleep(0.01)  # Simulate async work
         callback_invocations.append(status)
@@ -128,10 +128,10 @@ async def test_multiple_callbacks_all_invoked(task_notification_server):
     callback1_calls = []
     callback2_calls = []
 
-    def callback1(status: TaskStatusResponse):
+    def callback1(status: GetTaskResult):
         callback1_calls.append(status.status)
 
-    def callback2(status: TaskStatusResponse):
+    def callback2(status: GetTaskResult):
         callback2_calls.append(status.status)
 
     async with Client(task_notification_server) as client:
@@ -153,11 +153,11 @@ async def test_callback_error_doesnt_break_notification(task_notification_server
     callback1_calls = []
     callback2_calls = []
 
-    def failing_callback(status: TaskStatusResponse):
+    def failing_callback(status: GetTaskResult):
         callback1_calls.append("called")
         raise ValueError("Callback intentionally fails")
 
-    def working_callback(status: TaskStatusResponse):
+    def working_callback(status: GetTaskResult):
         callback2_calls.append(status.status)
 
     async with Client(task_notification_server) as client:
@@ -205,5 +205,5 @@ async def test_notification_with_failed_task(task_notification_server):
         status = await task.status()
         assert status.status == "failed"
         assert (
-            status.status_message is not None
+            status.statusMessage is not None
         )  # Error details in statusMessage per spec

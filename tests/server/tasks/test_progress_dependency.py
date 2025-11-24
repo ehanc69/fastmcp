@@ -100,7 +100,7 @@ async def test_progress_status_message_in_background_task():
 
         # Verify statusMessage field is accessible and contains progress info
         # Should not raise AttributeError
-        msg = status.status_message
+        msg = status.statusMessage
         assert msg is None or msg.startswith("Step")
 
         # Wait for completion

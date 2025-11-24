@@ -11,8 +11,8 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Generic, TypeVar
 
 import mcp.types
+from mcp.types import GetTaskResult
 
-from fastmcp.client._temporary_sep_1686_shims import TaskStatusResponse
 from fastmcp.utilities.logging import get_logger
 
 logger = get_logger(__name__)
@@ -57,10 +57,10 @@ class Task(abc.ABC, Generic[TaskResultT]):
         self._is_immediate = immediate_result is not None
 
         # Notification-based optimization (SEP-1686 notifications/tasks/status)
-        self._status_cache: TaskStatusResponse | None = None
+        self._status_cache: GetTaskResult | None = None
         self._status_event: asyncio.Event | None = None  # Lazy init
         self._status_callbacks: list[
-            Callable[[TaskStatusResponse], None | Awaitable[None]]
+            Callable[[GetTaskResult], None | Awaitable[None]]
         ] = []
         self._cached_result: TaskResultT | None = None
 
@@ -96,7 +96,7 @@ class Task(abc.ABC, Generic[TaskResultT]):
         """
         return self._is_immediate
 
-    def _handle_status_notification(self, status: TaskStatusResponse) -> None:
+    def _handle_status_notification(self, status: GetTaskResult) -> None:
         """Process incoming notifications/tasks/status (internal).
 
         Called by Client when a notification is received for this task.
@@ -124,7 +124,7 @@ class Task(abc.ABC, Generic[TaskResultT]):
 
     def on_status_change(
         self,
-        callback: Callable[[TaskStatusResponse], None | Awaitable[None]],
+        callback: Callable[[GetTaskResult], None | Awaitable[None]],
     ) -> None:
         """Register callback for status change notifications.
 
@@ -134,21 +134,21 @@ class Task(abc.ABC, Generic[TaskResultT]):
         Supports both sync and async callbacks (auto-detected).
 
         Args:
-            callback: Function to call with TaskStatusResponse when status changes.
+            callback: Function to call with GetTaskResult when status changes.
                      Can return None (sync) or Awaitable[None] (async).
 
         Example:
             >>> task = await client.call_tool("slow_operation", {}, task=True)
             >>>
-            >>> def on_update(status: TaskStatusResponse):
-            ...     print(f"Task {status.task_id} is now {status.status}")
+            >>> def on_update(status: GetTaskResult):
+            ...     print(f"Task {status.taskId} is now {status.status}")
             >>>
             >>> task.on_status_change(on_update)
             >>> result = await task  # Callback fires when status changes
         """
         self._status_callbacks.append(callback)
 
-    async def status(self) -> TaskStatusResponse:
+    async def status(self) -> GetTaskResult:
         """Get current task status.
 
         If server executed immediately, returns synthetic completed status.
@@ -158,10 +158,10 @@ class Task(abc.ABC, Generic[TaskResultT]):
 
         if self._is_immediate:
             # Return synthetic completed status
-            return TaskStatusResponse(
-                taskId=self._task_id,  # Use alias field name
+            return GetTaskResult(
+                taskId=self._task_id,
                 status="completed",
-                createdAt=datetime.now(timezone.utc).isoformat(),  # Synthetic timestamp
+                createdAt=datetime.now(timezone.utc),  # SDK expects datetime object
                 ttl=None,
                 pollInterval=1000,  # Include poll interval even for immediate results
             )
@@ -186,7 +186,7 @@ class Task(abc.ABC, Generic[TaskResultT]):
 
     async def wait(
         self, *, state: str | None = None, timeout: float = 300.0
-    ) -> TaskStatusResponse:
+    ) -> GetTaskResult:
         """Wait for task to reach a specific state or complete.
 
         Uses event-based waiting when notifications are available (fast),
@@ -199,7 +199,7 @@ class Task(abc.ABC, Generic[TaskResultT]):
             timeout: Maximum time to wait in seconds
 
         Returns:
-            TaskStatusResponse: Final task status
+            GetTaskResult: Final task status
 
         Raises:
             TimeoutError: If desired state not reached within timeout
@@ -334,20 +334,13 @@ class ToolTask(Task["CallToolResult"]):
             # Wait for completion using event-based wait (respects notifications)
             await self.wait()
 
-            # Get the raw result (could be ToolResult or CallToolResult)
+            # Get the raw result (dict or CallToolResult)
             raw_result = await self._client.get_task_result(self._task_id)
 
-            # If it's a ToolResult (from shim), convert to mcp.types.CallToolResult then parse
-            if hasattr(raw_result, "content") and hasattr(
-                raw_result, "structured_content"
-            ):
-                # It's a ToolResult - convert to MCP type
-                mcp_result = mcp.types.CallToolResult(
-                    content=raw_result.content,
-                    structuredContent=raw_result.structured_content,  # type: ignore[arg-type]
-                    _meta=raw_result.meta,
-                )
-                # Parse it the same way call_tool does (adds .data field)
+            # Convert to CallToolResult if needed and parse
+            if isinstance(raw_result, dict):
+                # Raw dict from get_task_result - parse as CallToolResult
+                mcp_result = mcp.types.CallToolResult.model_validate(raw_result)
                 result = await self._client._parse_call_tool_result(
                     self._tool_name, mcp_result, raise_on_error=True
                 )
@@ -357,8 +350,21 @@ class ToolTask(Task["CallToolResult"]):
                     self._tool_name, raw_result, raise_on_error=True
                 )
             else:
-                # Unknown type - just return it
-                result = raw_result  # type: ignore[assignment]
+                # Legacy ToolResult format - convert to MCP type
+                if hasattr(raw_result, "content") and hasattr(
+                    raw_result, "structured_content"
+                ):
+                    mcp_result = mcp.types.CallToolResult(
+                        content=raw_result.content,
+                        structuredContent=raw_result.structured_content,  # type: ignore[arg-type]
+                        _meta=raw_result.meta,
+                    )
+                    result = await self._client._parse_call_tool_result(
+                        self._tool_name, mcp_result, raise_on_error=True
+                    )
+                else:
+                    # Unknown type - just return it
+                    result = raw_result  # type: ignore[assignment]
 
         # Cache before returning
         self._cached_result = result
