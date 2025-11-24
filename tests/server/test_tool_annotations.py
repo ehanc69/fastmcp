@@ -221,8 +221,8 @@ async def test_tool_functionality_with_annotations():
         assert result.data == {"name": "test_item", "value": 42}
 
 
-async def test_task_hint_auto_populated_for_task_enabled_tool():
-    """Test that taskHint is automatically set when tool has task=True."""
+async def test_task_execution_auto_populated_for_task_enabled_tool():
+    """Test that execution.task is automatically set when tool has task=True."""
     mcp = FastMCP("Test Server")
 
     @mcp.tool(task=True)
@@ -234,12 +234,12 @@ async def test_task_hint_auto_populated_for_task_enabled_tool():
         tools_result = await client.list_tools()
         assert len(tools_result) == 1
         assert tools_result[0].name == "background_tool"
-        assert tools_result[0].annotations is not None
-        assert tools_result[0].annotations.taskHint == "optional"
+        assert tools_result[0].execution is not None
+        assert tools_result[0].execution.task == "optional"
 
 
-async def test_task_hint_omitted_for_task_disabled_tool():
-    """Test that taskHint is not set when tool has task=False or default."""
+async def test_task_execution_omitted_for_task_disabled_tool():
+    """Test that execution is not set when tool has task=False or default."""
     mcp = FastMCP("Test Server")
 
     @mcp.tool(task=False)
@@ -251,24 +251,5 @@ async def test_task_hint_omitted_for_task_disabled_tool():
         tools_result = await client.list_tools()
         assert len(tools_result) == 1
         assert tools_result[0].name == "sync_tool"
-        # taskHint should be None for non-task tools (default is False, omitted)
-        if tools_result[0].annotations is not None:
-            assert tools_result[0].annotations.taskHint is None
-
-
-async def test_explicit_task_hint_not_overridden():
-    """Test that explicitly set taskHint is not overridden by auto-population."""
-    mcp = FastMCP("Test Server")
-
-    @mcp.tool(task=True, annotations=ToolAnnotations(taskHint="never"))
-    async def tool_with_explicit_hint(data: str) -> str:
-        """Tool with explicit taskHint that contradicts task flag."""
-        return f"Processed: {data}"
-
-    async with Client(mcp) as client:
-        tools_result = await client.list_tools()
-        assert len(tools_result) == 1
-        assert tools_result[0].name == "tool_with_explicit_hint"
-        assert tools_result[0].annotations is not None
-        # Explicit taskHint="never" should be preserved, not overridden to "optional"
-        assert tools_result[0].annotations.taskHint == "never"
+        # execution should be None for non-task tools (default is False, omitted)
+        assert tools_result[0].execution is None

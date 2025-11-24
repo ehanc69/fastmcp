@@ -1144,8 +1144,8 @@ wheels = [
 
 [[package]]
 name = "mcp"
-version = "1.21.2.dev6+9bd2aa8"
-source = { git = "https://github.com/modelcontextprotocol/python-sdk.git?rev=maxisbey%2FSEP-1686_Tasks#9bd2aa89aa50979fc6d0bd45535eedf1f69fda5d" }
+version = "1.21.2.dev9+341ad92"
+source = { git = "https://github.com/modelcontextprotocol/python-sdk.git?rev=maxisbey%2FSEP-1686_Tasks#341ad927ebc72004720fdbe701da9b386d0a2a70" }
 dependencies = [
     { name = "anyio" },
     { name = "httpx" },

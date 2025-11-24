@@ -16,7 +16,16 @@ from typing import (
 
 import mcp.types
 import pydantic_core
-from mcp.types import CallToolResult, ContentBlock, Icon, TextContent, ToolAnnotations
+
+# Import task execution types directly from SDK (exist but not in __all__ yet)
+from mcp.types import (
+    CallToolResult,
+    ContentBlock,
+    Icon,
+    TextContent,
+    ToolAnnotations,
+    ToolExecution,
+)
 from mcp.types import Tool as MCPTool
 from pydantic import Field, PydanticSchemaGenerationError
 from typing_extensions import TypeVar
@@ -165,17 +174,14 @@ class Tool(FastMCPComponent):
         elif self.annotations and self.annotations.title:
             title = self.annotations.title
 
-        # Auto-populate taskHint based on tool.task flag if not explicitly set
-        # Per SEP-1686: tools declare task support via annotations.taskHint
-        # taskHint values: "never" (no task support), "optional" (supports both), "always" (requires task)
+        # Auto-populate task execution mode based on tool.task flag if not explicitly set
+        # Per SEP-1686: tools declare task support via execution.task
+        # task values: "never" (no task support), "optional" (supports both), "always" (requires task)
         annotations = self.annotations
+        execution = None
         if self.task:
             # Tool supports background execution - use "optional" to allow both immediate and task execution
-            if annotations is None:
-                annotations = ToolAnnotations(taskHint="optional")  # type: ignore[call-arg]
-            elif getattr(annotations, "taskHint", None) is None:
-                # Preserve existing annotations, add taskHint
-                annotations = annotations.model_copy(update={"taskHint": "optional"})
+            execution = ToolExecution(task="optional")
 
         return MCPTool(
             name=overrides.get("name", self.name),
@@ -185,6 +191,7 @@ class Tool(FastMCPComponent):
             outputSchema=overrides.get("outputSchema", self.output_schema),
             icons=overrides.get("icons", self.icons),
             annotations=overrides.get("annotations", annotations),
+            execution=overrides.get("execution", execution),
             _meta=overrides.get(
                 "_meta", self.get_meta(include_fastmcp_meta=include_fastmcp_meta)
             ),
