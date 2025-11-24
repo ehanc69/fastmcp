@@ -104,15 +104,6 @@ async def test_client_advertises_task_capability_when_enabled():
         experimental__enable_docket=True,
         experimental__enable_tasks=True,
     ):
-        # Import here so settings are applied
-        from fastmcp.client._temporary_sep_1686_shims import (
-            task_capable_initialize,
-        )
-
-        # Verify the custom initialize function exists
-        assert task_capable_initialize is not None
-
-        # Test with actual client to verify it works
         mcp = FastMCP("client-cap-test")
 
         @mcp.tool()

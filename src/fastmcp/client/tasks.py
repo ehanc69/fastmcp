@@ -6,19 +6,102 @@ import abc
 import asyncio
 import inspect
 import time
+import weakref
 from collections.abc import Awaitable, Callable
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Generic, TypeVar
 
 import mcp.types
-from mcp.types import GetTaskResult
+from mcp import ClientSession
+from mcp.client.session import (
+    SUPPORTED_PROTOCOL_VERSIONS,
+    _default_elicitation_callback,
+    _default_list_roots_callback,
+    _default_sampling_callback,
+)
+from mcp.types import GetTaskResult, TaskStatusNotification
 
+from fastmcp.client.messages import Message, MessageHandler
 from fastmcp.utilities.logging import get_logger
 
 logger = get_logger(__name__)
 
 if TYPE_CHECKING:
     from fastmcp.client.client import CallToolResult, Client
+
+
+# TODO(SEP-1686): Remove this function when the MCP SDK adds an
+# `experimental_capabilities` parameter to ClientSession (the server side
+# already has this via `create_initialization_options(experimental_capabilities={})`).
+# The SDK currently hardcodes `experimental=None` in ClientSession.initialize().
+async def _task_capable_initialize(
+    session: ClientSession,
+) -> mcp.types.InitializeResult:
+    """Initialize a session with task capabilities declared."""
+    sampling = (
+        mcp.types.SamplingCapability()
+        if session._sampling_callback != _default_sampling_callback
+        else None
+    )
+    elicitation = (
+        mcp.types.ElicitationCapability()
+        if session._elicitation_callback != _default_elicitation_callback
+        else None
+    )
+    roots = (
+        mcp.types.RootsCapability(listChanged=True)
+        if session._list_roots_callback != _default_list_roots_callback
+        else None
+    )
+
+    result = await session.send_request(
+        mcp.types.ClientRequest(
+            mcp.types.InitializeRequest(
+                params=mcp.types.InitializeRequestParams(
+                    protocolVersion=mcp.types.LATEST_PROTOCOL_VERSION,
+                    capabilities=mcp.types.ClientCapabilities(
+                        sampling=sampling,
+                        elicitation=elicitation,
+                        experimental={"tasks": {}},
+                        roots=roots,
+                    ),
+                    clientInfo=session._client_info,
+                ),
+            )
+        ),
+        mcp.types.InitializeResult,
+    )
+
+    if result.protocolVersion not in SUPPORTED_PROTOCOL_VERSIONS:
+        raise RuntimeError(
+            f"Unsupported protocol version from the server: {result.protocolVersion}"
+        )
+
+    session._server_capabilities = result.capabilities
+
+    await session.send_notification(
+        mcp.types.ClientNotification(mcp.types.InitializedNotification())
+    )
+
+    return result
+
+
+class TaskNotificationHandler(MessageHandler):
+    """MessageHandler that routes task status notifications to Task objects."""
+
+    def __init__(self, client: Client):
+        super().__init__()
+        self._client_ref: weakref.ref[Client] = weakref.ref(client)
+
+    async def dispatch(self, message: Message) -> None:
+        """Dispatch messages, including task status notifications."""
+        if isinstance(message, mcp.types.ServerNotification):
+            if isinstance(message.root, TaskStatusNotification):
+                client = self._client_ref()
+                if client:
+                    client._handle_task_status_notification(message.root)
+
+        await super().dispatch(message)
 
 
 TaskResultT = TypeVar("TaskResultT")

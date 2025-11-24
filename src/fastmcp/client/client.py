@@ -39,7 +39,7 @@ from fastmcp.client.logging import (
     create_log_callback,
     default_log_handler,
 )
-from fastmcp.client.messages import Message, MessageHandler, MessageHandlerT
+from fastmcp.client.messages import MessageHandler, MessageHandlerT
 from fastmcp.client.progress import ProgressHandler, default_progress_handler
 from fastmcp.client.roots import (
     RootsHandler,
@@ -54,7 +54,9 @@ from fastmcp.client.sampling import (
 from fastmcp.client.tasks import (
     PromptTask,
     ResourceTask,
+    TaskNotificationHandler,
     ToolTask,
+    _task_capable_initialize,
 )
 from fastmcp.exceptions import ToolError
 from fastmcp.mcp_config import MCPConfig
@@ -95,26 +97,6 @@ __all__ = [
 logger = get_logger(__name__)
 
 T = TypeVar("T", bound="ClientTransport")
-
-
-class TaskNotificationHandler(MessageHandler):
-    """MessageHandler that routes task status notifications to Task objects."""
-
-    def __init__(self, client: Client):
-        super().__init__()
-        self._client_ref: weakref.ref[Client] = weakref.ref(client)
-
-    async def dispatch(self, message: Message) -> None:
-        """Dispatch messages, including task status notifications."""
-        # Handle task status notifications using SDK's TaskStatusNotification type
-        if isinstance(message, mcp.types.ServerNotification):
-            if isinstance(message.root, TaskStatusNotification):
-                client = self._client_ref()
-                if client:
-                    client._handle_task_status_notification(message.root)
-
-        # Call parent dispatch for all other messages
-        await super().dispatch(message)
 
 
 @dataclass
@@ -476,30 +458,11 @@ class Client(Generic[ClientTransportT]):
 
         try:
             with anyio.fail_after(timeout):
-                # Handle task capabilities if enabled
                 if fastmcp.settings.experimental.enable_tasks:
-                    try:
-                        from fastmcp.client._temporary_sep_1686_shims import (
-                            task_capable_initialize,
-                        )
-
-                        # Call custom initialize with task capabilities
-                        self._session_state.initialize_result = (
-                            await task_capable_initialize(self.session)
-                        )
-                    except Exception as e:
-                        # If custom init fails, log and fall back to standard
-                        import logging
-
-                        logging.warning(
-                            f"Failed to initialize with task capabilities: {e}. "
-                            "Falling back to standard initialization."
-                        )
-                        self._session_state.initialize_result = (
-                            await self.session.initialize()
-                        )
+                    self._session_state.initialize_result = (
+                        await _task_capable_initialize(self.session)
+                    )
                 else:
-                    # Standard initialization
                     self._session_state.initialize_result = (
                         await self.session.initialize()
                     )
