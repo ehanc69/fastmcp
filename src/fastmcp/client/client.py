@@ -1530,13 +1530,13 @@ class Client(Generic[ClientTransportT]):
         params = PaginatedRequestParams(cursor=cursor, limit=limit)
         request = ListTasksRequest(params=params)
         server_response = await self.session.send_request(
-            request=request,  # type: ignore[arg-type]
-            result_type=dict,  # type: ignore[arg-type]
+            request=request,  # type: ignore[invalid-argument-type]
+            result_type=mcp.types.ListTasksResult,
         )
 
         # If server returned tasks, use those
-        if isinstance(server_response, dict) and server_response.get("tasks"):
-            return server_response
+        if server_response.tasks:
+            return server_response.model_dump(by_alias=True)
 
         # Server returned empty - fall back to client-side tracking
         tasks = []
@@ -1550,7 +1550,7 @@ class Client(Generic[ClientTransportT]):
 
         return {"tasks": tasks, "nextCursor": None}
 
-    async def cancel_task(self, task_id: str) -> GetTaskResult:
+    async def cancel_task(self, task_id: str) -> mcp.types.CancelTaskResult:
         """Cancel a task, transitioning it to cancelled state.
 
         Sends a 'tasks/cancel' MCP protocol request. Task will halt execution
@@ -1560,15 +1560,15 @@ class Client(Generic[ClientTransportT]):
             task_id: The task ID to cancel
 
         Returns:
-            GetTaskResult: The task status showing cancelled state
+            CancelTaskResult: The task status showing cancelled state
 
         Raises:
             RuntimeError: If task doesn't exist
         """
         request = CancelTaskRequest(params=CancelTaskRequestParams(taskId=task_id))
         return await self.session.send_request(
-            request=request,  # type: ignore[arg-type]
-            result_type=GetTaskResult,  # type: ignore[arg-type]
+            request=request,  # type: ignore[invalid-argument-type]
+            result_type=mcp.types.CancelTaskResult,
         )
 
     @classmethod

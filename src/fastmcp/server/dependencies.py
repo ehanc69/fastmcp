@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import contextlib
 import inspect
+import weakref
 from collections.abc import AsyncGenerator, Callable
 from contextlib import AsyncExitStack, asynccontextmanager
 from contextvars import ContextVar
@@ -33,7 +34,9 @@ if TYPE_CHECKING:
 # ContextVars for tracking Docket infrastructure
 _current_docket: ContextVar[Docket | None] = ContextVar("docket", default=None)  # type: ignore[assignment]
 _current_worker: ContextVar[Worker | None] = ContextVar("worker", default=None)  # type: ignore[assignment]
-_current_server: ContextVar[FastMCP | None] = ContextVar("server", default=None)  # type: ignore[assignment]
+_current_server: ContextVar[weakref.ref[FastMCP] | None] = ContextVar(  # type: ignore[invalid-assignment]
+    "server", default=None
+)
 
 __all__ = [
     "AccessToken",
@@ -471,9 +474,12 @@ class _CurrentFastMCP(Dependency):
     """Internal dependency class for CurrentFastMCP."""
 
     async def __aenter__(self):
-        server = _current_server.get()
-        if server is None:
+        server_ref = _current_server.get()
+        if server_ref is None:
             raise RuntimeError("No FastMCP server instance in context")
+        server = server_ref()
+        if server is None:
+            raise RuntimeError("FastMCP server instance is no longer available")
         return server
 
 
@@ -512,9 +518,12 @@ def get_server():
         RuntimeError: If no server in context
     """
 
-    server = _current_server.get()
-    if server is None:
+    server_ref = _current_server.get()
+    if server_ref is None:
         raise RuntimeError("No FastMCP server instance in context")
+    server = server_ref()
+    if server is None:
+        raise RuntimeError("FastMCP server instance is no longer available")
     return server
 
 

@@ -45,7 +45,7 @@ async def test_tasks_get_endpoint_returns_status(endpoint_server):
 
         # Check status immediately - should be submitted or working
         status = await task.status()
-        assert status.task_id == task.task_id
+        assert status.taskId == task.task_id
         assert status.status in ["working", "completed"]
 
         # Wait for completion

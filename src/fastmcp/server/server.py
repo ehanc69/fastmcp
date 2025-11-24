@@ -8,6 +8,7 @@ import json
 import re
 import secrets
 import warnings
+import weakref
 from collections.abc import (
     AsyncIterator,
     Awaitable,
@@ -434,10 +435,10 @@ class FastMCP(Generic[LifespanResultT]):
             yield user_lifespan_result
             return
 
-        # Set FastMCP server in ContextVar so CurrentFastMCP can access it
+        # Set FastMCP server in ContextVar so CurrentFastMCP can access it (use weakref to avoid reference cycles)
         from fastmcp.server.dependencies import _current_server
 
-        server_token = _current_server.set(self)
+        server_token = _current_server.set(weakref.ref(self))
 
         try:
             # Create Docket instance using configured URL

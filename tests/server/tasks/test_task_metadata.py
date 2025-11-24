@@ -33,9 +33,9 @@ async def test_tasks_get_includes_related_task_metadata(metadata_server: FastMCP
         # Get status via client (which uses protocol properly)
         status = await client.get_task_status(task_id)
 
-        # TaskStatusResponse is parsed from response with metadata
+        # GetTaskResult is returned from response with metadata
         # Verify the protocol included related-task metadata by checking the response worked
-        assert status.task_id == task_id
+        assert status.taskId == task_id
         assert status.status in ["working", "completed"]
 
 

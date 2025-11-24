@@ -74,12 +74,12 @@ async def test_tool_task_await_syntax(tool_task_server):
 
 
 async def test_tool_task_status_and_wait(tool_task_server):
-    """ToolTask.status() returns TaskStatusResponse."""
+    """ToolTask.status() returns GetTaskResult."""
     async with Client(tool_task_server) as client:
         task = await client.call_tool("echo", {"message": "test"}, task=True)
 
         status = await task.status()
-        assert status.task_id == task.task_id
+        assert status.taskId == task.task_id
         assert status.status in ["working", "completed"]
 
         # Wait for completion

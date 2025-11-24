@@ -338,7 +338,7 @@ async def tasks_cancel_handler(
             taskId=client_task_id,
             status="cancelled",
             createdAt=created_at or datetime.now(timezone.utc).isoformat(),
-            ttl=None,
+            ttl=60_000,  # 60 seconds TTL for cancelled tasks
             pollInterval=1000,
             statusMessage="Task cancelled",
         )

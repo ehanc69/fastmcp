@@ -170,10 +170,10 @@ class Context:
         token = _current_context.set(self)
         self._tokens.append(token)
 
-        # Set current server for dependency injection
+        # Set current server for dependency injection (use weakref to avoid reference cycles)
         from fastmcp.server.dependencies import _current_server
 
-        self._server_token = _current_server.set(self.fastmcp)
+        self._server_token = _current_server.set(weakref.ref(self.fastmcp))
 
         return self
 
@@ -187,6 +187,7 @@ class Context:
             from fastmcp.server.dependencies import _current_server
 
             _current_server.reset(self._server_token)
+            delattr(self, "_server_token")
 
         # Reset context token
         if self._tokens:
