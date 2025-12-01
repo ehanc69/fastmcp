@@ -654,7 +654,7 @@ requires-dist = [
     { name = "exceptiongroup", specifier = ">=1.2.2" },
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "jsonschema-path", specifier = ">=0.3.4" },
-    { name = "mcp", git = "https://github.com/modelcontextprotocol/python-sdk.git?rev=maxisbey%2FSEP-1686_Tasks" },
+    { name = "mcp", git = "https://github.com/modelcontextprotocol/python-sdk.git?rev=main" },
     { name = "openai", marker = "extra == 'openai'", specifier = ">=1.102.0" },
     { name = "openapi-pydantic", specifier = ">=0.5.1" },
     { name = "platformdirs", specifier = ">=4.0.0" },
@@ -1144,8 +1144,8 @@ wheels = [
 
 [[package]]
 name = "mcp"
-version = "1.21.2.dev12+77155fc"
-source = { git = "https://github.com/modelcontextprotocol/python-sdk.git?rev=maxisbey%2FSEP-1686_Tasks#77155fc2ba8d75e76840f0164cafe36251aad132" }
+version = "1.22.1.dev12+c92bb2f"
+source = { git = "https://github.com/modelcontextprotocol/python-sdk.git?rev=main#c92bb2f7ffaa61813d7cc350887f4ece38307769" }
 dependencies = [
     { name = "anyio" },
     { name = "httpx" },

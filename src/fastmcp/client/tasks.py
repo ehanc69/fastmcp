@@ -241,12 +241,14 @@ class Task(abc.ABC, Generic[TaskResultT]):
 
         if self._is_immediate:
             # Return synthetic completed status
+            now = datetime.now(timezone.utc)
             return GetTaskResult(
                 taskId=self._task_id,
                 status="completed",
-                createdAt=datetime.now(timezone.utc),  # SDK expects datetime object
+                createdAt=now,
+                lastUpdatedAt=now,
                 ttl=None,
-                pollInterval=1000,  # Include poll interval even for immediate results
+                pollInterval=1000,
             )
 
         # Return cached status if available (from notification)

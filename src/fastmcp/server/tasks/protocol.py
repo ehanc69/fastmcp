@@ -122,10 +122,11 @@ async def tasks_get_handler(server: FastMCP, params: dict[str, Any]) -> GetTaskR
         return GetTaskResult(
             taskId=client_task_id,
             status=mcp_state,  # type: ignore[arg-type]
-            createdAt=created_at,  # type: ignore[arg-type]  # Required ISO 8601 timestamp
-            ttl=60000,  # Default value in milliseconds
+            createdAt=created_at,  # type: ignore[arg-type]
+            lastUpdatedAt=datetime.now(timezone.utc),
+            ttl=60000,
             pollInterval=1000,
-            statusMessage=status_message,  # Optional per spec line 403
+            statusMessage=status_message,
         )
 
 
@@ -338,7 +339,8 @@ async def tasks_cancel_handler(
             taskId=client_task_id,
             status="cancelled",
             createdAt=created_at or datetime.now(timezone.utc).isoformat(),
-            ttl=60_000,  # 60 seconds TTL for cancelled tasks
+            lastUpdatedAt=datetime.now(timezone.utc),
+            ttl=60_000,
             pollInterval=1000,
             statusMessage="Task cancelled",
         )

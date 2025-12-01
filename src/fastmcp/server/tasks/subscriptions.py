@@ -121,12 +121,12 @@ async def _send_status_notification(
     elif state == ExecutionState.CANCELLED:
         status_message = "Task cancelled"
 
-    # Construct notification params (full Task object per spec lines 264, 452-454)
     params_dict = {
         "taskId": task_id,
         "status": mcp_status,
         "createdAt": created_at,
-        "ttl": 60000,  # Default TTL
+        "lastUpdatedAt": datetime.now(timezone.utc).isoformat(),
+        "ttl": 60000,
         "pollInterval": 1000,
     }
 
@@ -186,11 +186,11 @@ async def _send_progress_notification(
         else datetime.now(timezone.utc).isoformat()
     )
 
-    # Construct notification params with progress message
     params_dict = {
         "taskId": task_id,
         "status": mcp_status,
         "createdAt": created_at,
+        "lastUpdatedAt": datetime.now(timezone.utc).isoformat(),
         "ttl": 60000,
         "pollInterval": 1000,
         "statusMessage": execution.progress.message,

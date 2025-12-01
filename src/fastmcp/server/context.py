@@ -19,17 +19,16 @@ from mcp.server.lowlevel.helper_types import ReadResourceContents
 from mcp.server.lowlevel.server import request_ctx
 from mcp.shared.context import RequestContext
 from mcp.types import (
-    AudioContent,
     ClientCapabilities,
     CreateMessageResult,
     GetPromptResult,
-    ImageContent,
     IncludeContext,
     ModelHint,
     ModelPreferences,
     Root,
     SamplingCapability,
     SamplingMessage,
+    SamplingMessageContentBlock,
     TextContent,
 )
 from mcp.types import CreateMessageRequestParams as SamplingParams
@@ -497,7 +496,7 @@ class Context:
         temperature: float | None = None,
         max_tokens: int | None = None,
         model_preferences: ModelPreferences | str | list[str] | None = None,
-    ) -> TextContent | ImageContent | AudioContent:
+    ) -> SamplingMessageContentBlock | list[SamplingMessageContentBlock]:
         """
         Send a sampling request to the client and await the response.
 
