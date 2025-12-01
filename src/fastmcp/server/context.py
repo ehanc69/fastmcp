@@ -61,6 +61,7 @@ _clamp_logger(logger=to_client_logger, max_level="DEBUG")
 
 
 T = TypeVar("T", default=Any)
+
 _current_context: ContextVar[Context | None] = ContextVar("context", default=None)  # type: ignore[assignment]
 _flush_lock = anyio.Lock()
 
