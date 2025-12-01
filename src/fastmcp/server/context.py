@@ -31,6 +31,8 @@ from mcp.types import (
     SamplingCapability,
     SamplingMessage,
     TextContent,
+    ToolResultContent,
+    ToolUseContent,
 )
 from mcp.types import CreateMessageRequestParams as SamplingParams
 from mcp.types import Prompt as MCPPrompt
@@ -62,6 +64,19 @@ _clamp_logger(logger=to_client_logger, max_level="DEBUG")
 
 
 T = TypeVar("T", default=Any)
+
+# Content types that can be returned from sampling
+SamplingContent = (
+    TextContent
+    | ImageContent
+    | AudioContent
+    | ToolUseContent
+    | ToolResultContent
+    | list[
+        TextContent | ImageContent | AudioContent | ToolUseContent | ToolResultContent
+    ]
+)
+
 _current_context: ContextVar[Context | None] = ContextVar("context", default=None)  # type: ignore[assignment]
 _flush_lock = anyio.Lock()
 
@@ -482,7 +497,7 @@ class Context:
         temperature: float | None = None,
         max_tokens: int | None = None,
         model_preferences: ModelPreferences | str | list[str] | None = None,
-    ) -> TextContent | ImageContent | AudioContent:
+    ) -> SamplingContent:
         """
         Send a sampling request to the client and await the response.
 
