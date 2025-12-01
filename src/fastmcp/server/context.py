@@ -19,20 +19,17 @@ from mcp.server.lowlevel.helper_types import ReadResourceContents
 from mcp.server.lowlevel.server import request_ctx
 from mcp.shared.context import RequestContext
 from mcp.types import (
-    AudioContent,
     ClientCapabilities,
     CreateMessageResult,
     GetPromptResult,
-    ImageContent,
     IncludeContext,
     ModelHint,
     ModelPreferences,
     Root,
     SamplingCapability,
     SamplingMessage,
+    SamplingMessageContentBlock,
     TextContent,
-    ToolResultContent,
-    ToolUseContent,
 )
 from mcp.types import CreateMessageRequestParams as SamplingParams
 from mcp.types import Prompt as MCPPrompt
@@ -64,18 +61,6 @@ _clamp_logger(logger=to_client_logger, max_level="DEBUG")
 
 
 T = TypeVar("T", default=Any)
-
-# Content types that can be returned from sampling
-SamplingContent = (
-    TextContent
-    | ImageContent
-    | AudioContent
-    | ToolUseContent
-    | ToolResultContent
-    | list[
-        TextContent | ImageContent | AudioContent | ToolUseContent | ToolResultContent
-    ]
-)
 
 _current_context: ContextVar[Context | None] = ContextVar("context", default=None)  # type: ignore[assignment]
 _flush_lock = anyio.Lock()
@@ -497,7 +482,7 @@ class Context:
         temperature: float | None = None,
         max_tokens: int | None = None,
         model_preferences: ModelPreferences | str | list[str] | None = None,
-    ) -> SamplingContent:
+    ) -> SamplingMessageContentBlock | list[SamplingMessageContentBlock]:
         """
         Send a sampling request to the client and await the response.
 
